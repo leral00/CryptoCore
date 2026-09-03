@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cryptocore"
+version = "1.0.0"
+description = "CLI tool for AES-128 encryption and decryption in ECB mode."
+requires-python = ">=3.9"
+dependencies = [
+    "pycryptodome>=3.20"
+]
+
+[project.scripts]
+cryptocore = "cryptocore.cli_parser:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
