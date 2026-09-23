@@ -11,6 +11,7 @@ def run_cli(*arguments):
         [sys.executable, "-m", "cryptocore.cli_parser", *arguments],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
 
@@ -77,3 +78,4 @@ def test_cli_rejects_both_operations(tmp_path: Path):
     )
 
     assert result.returncode != 0
+
