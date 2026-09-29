@@ -10,15 +10,17 @@
 - шифрование и расшифрование текстовых и бинарных файлов;
 - ключ в формате HEX;
 - работа через командную строку;
-- понятная обработка ошибок;
-- проверка полного цикла «шифрование → расшифрование».
+- обработка ошибок;
+- проверка полного цикла «шифрование → расшифрование»;
+- проверка совместимости с OpenSSL.
 
 ## Требования
 
 - Python 3.9 или новее;
-- pycryptodome;
-- pytest для запуска тестов;
-- Git для работы с репозиторием.
+- PyCryptodome;
+- pytest;
+- OpenSSL для проверки совместимости;
+- Git.
 
 ## Установка
 
@@ -57,43 +59,157 @@ cryptocore --algorithm aes --mode ecb --encrypt --key 000102030405060708090a0b0c
 cryptocore --algorithm aes --mode ecb --decrypt --key 000102030405060708090a0b0c0d0e0f --input ciphertext.bin --output decrypted.txt
 ```
 
-Если `--output` не указан:
+Для AES-128 ключ должен иметь размер 16 байт, то есть 32 шестнадцатеричных символа.
 
-- при шифровании будет использовано имя `<input>.enc`;
-- при расшифровании будет использовано имя `<input>.dec`.
-
-## Проверка
-
-Запуск тестов:
+Проверить совпадение исходного и расшифрованного файлов в Windows можно командой:
 
 ```powershell
-pytest -q
+fc /b plaintext.txt decrypted.txt
 ```
 
-Основная проверка:
+## Работа с бинарным файлом
+
+CryptoCore работает с текстовыми и бинарными файлами.
+
+Для проверки OpenSSL можно создать бинарный файл размером ровно 16 байт:
 
 ```powershell
-cryptocore --algorithm aes --mode ecb --encrypt --key 000102030405060708090a0b0c0d0e0f --input original_file.txt --output ciphertext.bin
-cryptocore --algorithm aes --mode ecb --decrypt --key 000102030405060708090a0b0c0d0e0f --input ciphertext.bin --output decrypted.txt
+python -c "open('plaintext.bin', 'wb').write(bytes.fromhex('00112233445566778899aabbccddeeff'))"
 ```
 
-Затем сравните файлы:
+Проверка размера файла:
 
 ```powershell
-fc /b original_file.txt decrypted.txt
+(Get-Item plaintext.bin).Length
 ```
 
-Команда не должна обнаружить различий.
+Результат:
 
-## Проверка с OpenSSL
+```text
+16
+```
 
-Для файла, размер которого уже кратен 16 байтам, можно сравнить шифртекст с OpenSSL:
+Для файла размером 16 байт можно выполнить шифрование CryptoCore:
+
+```powershell
+cryptocore --algorithm aes --mode ecb --encrypt --key 000102030405060708090a0b0c0d0e0f --input plaintext.bin --output ciphertext.bin
+```
+
+CryptoCore использует PKCS#7 padding, поэтому к исходному блоку из 16 байт будет добавлен дополнительный блок padding.
+
+## Проверка совместимости с OpenSSL
+
+Для автоматической проверки результата CryptoCore используется OpenSSL.
+
+Запуск автотеста:
+
+```powershell
+pytest -q tests/test_openssl.py
+```
+
+Если OpenSSL установлен и доступен в `PATH`, тест должен завершиться успешно:
+
+```text
+1 passed
+```
+
+Если OpenSSL отсутствует, тест будет пропущен:
+
+```text
+1 skipped
+```
+
+### Ручная проверка OpenSSL
+
+Для файла размером 16 байт можно использовать OpenSSL без добавления padding:
 
 ```powershell
 openssl enc -aes-128-ecb -K 000102030405060708090a0b0c0d0e0f -in plaintext.bin -out ciphertext_openssl.bin -nopad
 ```
 
-Параметр `-nopad` здесь используется только для данных, размер которых кратен 16 байтам. CryptoCore самостоятельно реализует PKCS#7.
+Параметр `-nopad` используется, потому что размер исходного файла уже кратен размеру блока AES — 16 байтам.
+
+Проверить размер результата:
+
+```powershell
+(Get-Item ciphertext_openssl.bin).Length
+```
+
+Результат:
+
+```text
+16
+```
+
+Для полной проверки совместимости используется автоматический тест:
+
+```powershell
+pytest -q tests/test_openssl.py
+```
+
+## Проверка полного цикла
+
+Полный цикл работы программы:
+
+```text
+исходный файл
+     ↓
+  шифрование
+     ↓
+зашифрованный файл
+     ↓
+ расшифрование
+     ↓
+восстановленный файл
+```
+
+Пример:
+
+```powershell
+cryptocore --algorithm aes --mode ecb --encrypt --key 000102030405060708090a0b0c0d0e0f --input plaintext.txt --output ciphertext.bin
+cryptocore --algorithm aes --mode ecb --decrypt --key 000102030405060708090a0b0c0d0e0f --input ciphertext.bin --output decrypted.txt
+fc /b plaintext.txt decrypted.txt
+```
+
+## Запуск тестов
+
+Все тесты:
+
+```powershell
+pytest -q
+```
+
+Тесты ECB:
+
+```powershell
+pytest -q tests/test_ecb.py
+```
+
+Тесты CLI:
+
+```powershell
+pytest -q tests/test_cli.py
+```
+
+Тест совместимости с OpenSSL:
+
+```powershell
+pytest -q tests/test_openssl.py
+```
+
+## Обработка ошибок
+
+Программа проверяет корректность входных параметров.
+
+Например, неверный ключ:
+
+```powershell
+cryptocore --algorithm aes --mode ecb --encrypt --key 1234 --input plaintext.txt
+```
+
+В этом случае программа завершится с ошибкой и сообщит о некорректном размере ключа.
+
+Одновременное использование `--encrypt` и `--decrypt` также является ошибкой.
 
 ## Структура проекта
 
@@ -109,9 +225,45 @@ CryptoCore/
 │           └── ecb.py
 ├── tests/
 │   ├── test_ecb.py
-│   └── test_cli.py
+│   ├── test_cli.py
+│   └── test_openssl.py
 ├── .gitignore
 ├── pyproject.toml
 ├── requirements.txt
 └── README.md
 ```
+
+## Назначение основных файлов
+
+- `cli_parser.py` — обработка аргументов командной строки;
+- `file_io.py` — чтение и запись файлов;
+- `modes/ecb.py` — реализация AES-128 ECB и PKCS#7 padding;
+- `tests/test_ecb.py` — тесты ECB и padding;
+- `tests/test_cli.py` — тестирование командной строки и обработки ошибок;
+- `tests/test_openssl.py` — автоматическая проверка результата CryptoCore с OpenSSL;
+- `pyproject.toml` — настройки сборки и установки проекта;
+- `requirements.txt` — зависимости проекта.
+
+## Зависимости
+
+Основная криптографическая библиотека:
+
+```text
+pycryptodome
+```
+
+Для автоматического тестирования:
+
+```text
+pytest
+```
+
+Для проверки совместимости:
+
+```text
+OpenSSL
+```
+
+## Лицензия
+
+Проект распространяется под лицензией MIT.
