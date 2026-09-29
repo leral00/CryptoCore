@@ -45,7 +45,7 @@ def test_ecb_matches_openssl(tmp_path):
             str(openssl_output),
         ],
         capture_output=True,
-        text=True,
+        text=False,
     )
 
     assert result.returncode == 0, (
