@@ -157,6 +157,7 @@ pytest -q tests/test_openssl_modes.py
 
 ```markdown
 Файл `tests/test_openssl_modes.py` автоматически проверяет совместимость CBC, CFB, OFB и CTR с OpenSSL.
+```
 
 Тесты проверяют два направления:
 1. CryptoCore шифрует файл → OpenSSL расшифровывает файл.
