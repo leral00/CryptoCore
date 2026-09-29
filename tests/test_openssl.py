@@ -50,7 +50,7 @@ def test_ecb_matches_openssl(tmp_path):
 
     assert result.returncode == 0, (
         f"OpenSSL завершился с ошибкой:\n"
-        f"{result.stderr}"
+        f"{result.stderr!r}"
     )
 
     assert cryptocore_output.read_bytes() == openssl_output.read_bytes()
