@@ -267,3 +267,49 @@ OpenSSL
 ## Лицензия
 
 Проект распространяется под лицензией MIT.
+
+---
+
+## Совместимость с OpenSSL (Interoperability Testing)
+
+Для проверки корректности работы и совместимости со стандартной утилитой OpenSSL CLI вы можете выполнить следующие тесты для каждого из режимов (`cbc`, `cfb`, `ofb`, `ctr`).
+
+### Тест 1: Шифрование через CryptoCore -> Расшифровка через OpenSSL
+
+1. Зашифруйте файл с помощью CryptoCore:
+   ```bash
+   cryptocore --algorithm aes --mode cbc --encrypt --key 000102030405060708090a0b0c0d0e0f --input plaintext.txt --output cipher.bin
+
+2. Извлеките 16 байт сгенерированного IV и сам шифротекст в отдельные файлы:
+   ```bash
+   dd if=cipher.bin of=iv.bin bs=16 count=1
+   dd if=cipher.bin of=ciphertext_only.bin bs=16 skip=1
+
+3. Расшифруйте шифротекст с помощью OpenSSL:
+   ```bash
+   openssl enc -aes-128-cbc -d -K 000102030405060708090a0b0c0d0e0f -iv $(xxd -p iv.bin | tr -d '\n') -in ciphertext_only.bin -out decrypted_openssl.txt
+
+4. Убедитесь, что расшифрованный файл совпадает с исходным:
+   ```diff plain.txt decrypted_openssl.txt
+
+### Тест 2: Шифрование через OpenSSL -> Расшифровка через CryptoCore
+
+1. Зашифруйте файл с помощью OpenSSL:
+   ```bash
+   openssl enc -aes-128-cbc -K 000102030405060708090a0b0c0d0e0f -iv AABBCCDDEEFF00112233445566778899 -in plain.txt -out openssl_cipher.bin
+
+2. Расшифруйте файл с помощью CryptoCore (передав тот же IV):
+   ```bash
+   cryptocore --algorithm aes --mode cbc --decrypt --key 000102030405060708090a0b0c0d0e0f --iv AABBCCDDEEFF00112233445566778899 --input openssl_cipher.bin --output decrypted_cryptocore.txt
+
+3. Убедитесь, что расшифрованный файл совпадает с исходным:
+   ```bash
+   diff plain.txt decrypted_cryptocore.txt
+
+   (Примечание: Для проверки режимов cfb, ofb и ctr замените флаг -aes-128-cbc в командах OpenSSL на -aes-128-cfb, -aes-128-ofb или -aes-128-ctr соответственно).
+
+## Запуск автотестов
+
+Для запуска комплекса модульных и интеграционных тестов выполните:
+```bash
+pytest
