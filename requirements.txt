@@ -1,5 +1,1 @@
-# Runtime dependencies
 pycryptodome>=3.20
-
-# Development and testing dependencies
-pytest>=8.0
