@@ -74,7 +74,11 @@ def parse_key(key_text: str) -> bytes:
     return key
 
 
-def get_output_path(input_path: str, decrypt: bool, output_path: str | None) -> str:
+def get_output_path(
+    input_path: str,
+    decrypt: bool,
+    output_path: str | None
+) -> str:
     if output_path:
         return output_path
 
@@ -88,9 +92,17 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
+    print(
+        "Предупреждение: передача ключа через командную строку "
+        "может быть небезопасной.",
+        file=sys.stderr
+    )
+
     try:
         key = parse_key(args.key)
+
         input_data = read_binary_file(args.input_file)
+
         output_path = get_output_path(
             args.input_file,
             args.decrypt,
