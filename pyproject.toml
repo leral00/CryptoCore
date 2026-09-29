@@ -6,9 +6,22 @@ build-backend = "setuptools.build_meta"
 name = "cryptocore"
 version = "1.0.0"
 description = "CLI tool for AES-128 encryption and decryption in ECB mode."
+readme = "README.md"
+license = { text = "MIT" }
+
+authors = [
+    { name = "CryptoCore Team" }
+]
+
 requires-python = ">=3.9"
+
 dependencies = [
     "pycryptodome>=3.20"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0"
 ]
 
 [project.scripts]
