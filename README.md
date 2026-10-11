@@ -9,8 +9,11 @@
 - PKCS#7 padding для режимов ECB и CBC;
 - работа без padding для режимов CFB, OFB и CTR;
 - автоматическая генерация IV для CBC, CFB, OFB и CTR;
+- автоматическая генерация случайного ключа, если `--key` не указан при шифровании;
+- собственный CSPRNG-модуль на основе `os.urandom()`;
 - хранение IV в первых 16 байтах зашифрованного файла;
 - ключ в формате HEX;
+- предупреждение о слабых ключах;
 - работа через командную строку;
 - обработка ошибок;
 - проверка полного цикла «шифрование → расшифрование»;
@@ -82,11 +85,68 @@ cryptocore --algorithm aes --mode cbc --decrypt --key 000102030405060708090a0b0c
 
 Для AES-128 ключ должен иметь размер 16 байт, то есть 32 шестнадцатеричных символа.
 
+## Генерация ключа (`--key` необязателен при шифровании)
+
+При **шифровании** параметр `--key` можно не указывать. В этом случае CryptoCore
+генерирует случайный 16-байтовый (128-бит) ключ через CSPRNG, выводит его в `stdout`
+в HEX-формате ровно один раз и шифрует файл этим ключом:
+
+```powershell
+cryptocore --algorithm aes --mode ctr --encrypt --input plaintext.txt --output ciphertext.bin
+```
+
+Вывод:
+
+```text
+[INFO] Generated random key: 1a2b3c4d5e6f7890fedcba9876543210
+Готово: ciphertext.bin
+```
+
+**Запишите ключ!** Он не сохраняется в выходной файл, и без него расшифровать данные невозможно.
+
+При **расшифровании** `--key` остаётся обязательным. Если его не указать, программа выведет ошибку и завершится с ненулевым кодом:
+
+```powershell
+cryptocore --algorithm aes --mode ctr --decrypt --key 1a2b3c4d5e6f7890fedcba9876543210 --input ciphertext.bin --output decrypted.txt
+```
+
+Если ключ указан вручную, он используется как раньше. Если ключ выглядит слабым
+(все байты одинаковые, например нули, или байты идут подряд: `000102...0f`),
+в `stderr` выводится предупреждение; шифрование при этом выполняется.
+
+## Безопасность CSPRNG
+
+Модуль `src/cryptocore/csprng.py` содержит функцию `generate_random_bytes(num_bytes: int) -> bytes`.
+
+- Источник случайности: `os.urandom()` — криптографически стойкий генератор ОС
+  (`getrandom()` / `/dev/urandom` в Linux и macOS, `BCryptGenRandom` в Windows).
+  Его состояние заполняется энтропией ядра ОС (прерывания, аппаратные источники, RDRAND и т. п.).
+- Модуль `random` и подобные ему генераторы (Mersenne Twister) **не используются**: их выход
+  предсказуем по достаточному числу наблюдений.
+- `generate_random_bytes` применяется для генерации ключа (если `--key` не указан) и **всех** IV
+  (CBC, CFB, OFB, CTR).
+- При сбое источника случайности (например, недоступен `/dev/urandom`) выбрасывается
+  `CSPRNGError` с понятным сообщением, программа завершается с ошибкой, а не использует
+  слабую случайность.
+- Некорректный аргумент (`num_bytes <= 0`, не `int`) приводит к `ValueError`.
+- 16 байт = 128 бит энтропии: вероятность совпадения двух ключей пренебрежимо мала.
+
+## Статистическое тестирование (NIST STS)
+
+Подробная инструкция и шаблон отчёта — в [TESTING.md](TESTING.md). Кратко:
+
+```powershell
+python scripts/generate_nist_data.py 10 nist_test_data.bin
+```
+
+Далее файл `nist_test_data.bin` подаётся на вход NIST Statistical Test Suite
+(`./assess 1000000`), см. TESTING.md.
+
 ## Работа с IV
 
 Для режимов CBC, CFB, OFB и CTR при шифровании IV генерируется автоматически с использованием
 ```text
-os.urandom().
+cryptocore.csprng.generate_random_bytes() (os.urandom)
 ```
 Размер IV составляет 16 байт.
 
@@ -343,10 +403,16 @@ pytest -q tests/test_ecb.py
 pytest -q tests/test_modes.py
 ```
 
-Тесты CLI:
+Тесты CLI (включая автогенерацию ключа):
 
 ```powershell
 pytest -q tests/test_cli.py
+```
+
+Тесты CSPRNG (уникальность 1000 ключей, распределение битов, обработка ошибок):
+
+```powershell
+pytest -q tests/test_csprng.py
 ```
 
 Тест совместимости ECB с OpenSSL:
@@ -375,6 +441,8 @@ cryptocore --algorithm aes --mode ecb --encrypt --key 1234 --input plaintext.txt
 
 Одновременное использование `--encrypt` и `--decrypt` также является ошибкой.
 
+Расшифрование без `--key` также является ошибкой.
+
 При попытке передать --iv во время шифрования программа выдаёт ошибку, так как IV генерируется автоматически.
 
 ## Структура проекта
@@ -385,6 +453,7 @@ CryptoCore/
 │   └── cryptocore/
 │       ├── __init__.py
 │       ├── cli_parser.py
+│       ├── csprng.py
 │       ├── file_io.py
 │       └── modes/
 │           ├── __init__.py
@@ -393,13 +462,17 @@ CryptoCore/
 │           ├── cfb.py
 │           ├── ofb.py
 │           └── ctr.py    
+├── scripts/
+│   └── generate_nist_data.py
 ├── tests/  
 │   ├── test_ecb.py
 │   ├── test_cli.py
+│   ├── test_csprng.py
 │   ├── test_modes.py
 │   ├── test_openssl.py
 │   └── test_openssl_modes.py
 ├── .gitignore
+├── TESTING.md
 ├── pyproject.toml
 ├── requirements.txt
 ├── requirements-dev.txt
@@ -409,6 +482,7 @@ CryptoCore/
 ## Назначение основных файлов
 
 - `cli_parser.py` — обработка аргументов командной строки;
+- `csprng.py` — генерация случайных байтов (`generate_random_bytes`) на основе `os.urandom`;
 - `file_io.py` — чтение и запись файлов;
 - `modes/ecb.py` — реализация AES-128 ECB и PKCS#7 padding;
 - `modes/cbc.py` — реализация режима CBC;
@@ -417,6 +491,9 @@ CryptoCore/
 - `modes/ctr.py` — реализация режима CTR;
 - `tests/test_ecb.py` — тесты ECB и padding;
 - `tests/test_cli.py` — тестирование командной строки и обработки ошибок;
+- `tests/test_csprng.py` — тесты CSPRNG (уникальность, распределение, ошибки);
+- `scripts/generate_nist_data.py` — генерация файла для NIST STS;
+- `TESTING.md` — инструкция и результаты NIST STS;
 - `tests/test_modes.py` — тесты новых режимов CBC, CFB, OFB и CTR;
 - `tests/test_openssl.py` — автоматическая проверка ECB с OpenSSL;
 - `tests/test_openssl_modes.py` — проверка совместимости CBC, CFB, OFB и CTR с OpenSSL;
