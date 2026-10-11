@@ -1,7 +1,7 @@
 import argparse
-import os
 import sys
 
+from .csprng import CSPRNGError, generate_key, generate_random_bytes
 from .file_io import read_binary_file, write_binary_file
 from .modes.ecb import decrypt_ecb, encrypt_ecb
 from .modes.cbc import decrypt_cbc, encrypt_cbc
@@ -46,8 +46,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--key",
-        required=True,
-        help="AES-128 ключ в HEX-формате, ровно 32 символа."
+        help=(
+            "AES-128 ключ в HEX-формате, ровно 32 символа. "
+            "Обязателен при расшифровании. При шифровании, если не указан, "
+            "генерируется случайный ключ и выводится в stdout."
+        )
     )
 
     parser.add_argument(
@@ -86,6 +89,21 @@ def parse_key(key_text: str) -> bytes:
         raise ValueError("Ключ AES-128 должен иметь размер 16 байт.")
 
     return key
+
+
+def is_weak_key(key: bytes) -> bool:
+    """Эвристика слабого ключа: нули, один и тот же байт, последовательность."""
+    if len(set(key)) == 1:
+        return True
+
+    ascending = all(
+        (key[i + 1] - key[i]) % 256 == 1 for i in range(len(key) - 1)
+    )
+    descending = all(
+        (key[i] - key[i + 1]) % 256 == 1 for i in range(len(key) - 1)
+    )
+
+    return ascending or descending
 
 
 def parse_iv(iv_text: str) -> bytes:
@@ -167,14 +185,17 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    print(
-        "Предупреждение: передача ключа через командную строку "
-        "может быть небезопасной.",
-        file=sys.stderr
-    )
-
     try:
-        key = parse_key(args.key)
+        if args.key is None and args.decrypt:
+            raise ValueError(
+                "Для расшифрования параметр --key обязателен."
+            )
+
+        if args.encrypt and args.iv:
+            raise ValueError(
+                "--iv нельзя указывать при шифровании. "
+                "IV генерируется автоматически."
+            )
 
         input_data = read_binary_file(args.input_file)
 
@@ -184,7 +205,27 @@ def main() -> int:
             args.output_file
         )
 
-        # ECB не использует IV
+        if args.key is not None:
+            key = parse_key(args.key)
+
+            print(
+                "Предупреждение: передача ключа через командную строку "
+                "может быть небезопасной.",
+                file=sys.stderr
+            )
+
+            if is_weak_key(key):
+                print(
+                    "Предупреждение: указанный ключ выглядит слабым "
+                    "(одинаковые или последовательные байты). "
+                    "Используйте случайный ключ.",
+                    file=sys.stderr
+                )
+        else:
+            key = generate_key()
+
+            print(f"[INFO] Generated random key: {key.hex()}", flush=True)
+
         if args.mode == "ecb":
             if args.encrypt:
                 result = encrypt_ecb(input_data, key)
@@ -197,13 +238,7 @@ def main() -> int:
             return 0
 
         if args.encrypt:
-            if args.iv:
-                raise ValueError(
-                    "--iv нельзя указывать при шифровании. "
-                    "IV генерируется автоматически."
-                )
-
-            iv = os.urandom(16)
+            iv = generate_random_bytes(16)
 
             encrypted_data = encrypt_data(
                 input_data,
@@ -212,9 +247,6 @@ def main() -> int:
                 iv
             )
 
-            # Формат файла:
-            # первые 16 байт — IV,
-            # остальные байты — ciphertext
             result = iv + encrypted_data
 
         else:
@@ -243,7 +275,7 @@ def main() -> int:
         print(f"Готово: {output_path}")
         return 0
 
-    except (ValueError, OSError) as error:
+    except (ValueError, OSError, CSPRNGError) as error:
         print(f"Ошибка: {error}", file=sys.stderr)
         return 1
 
