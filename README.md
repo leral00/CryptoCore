@@ -380,7 +380,7 @@ cryptocore --algorithm aes --mode cbc --decrypt --key 000102030405060708090a0b0c
 
 Проверить совпадение исходного и расшифрованного файлов в Windows можно командой:
 ```powershell
-fc /b plaintext.txt decrypted.txt
+fc.exe /b plaintext.txt decrypted.txt
 ```
 
 ## Запуск тестов
