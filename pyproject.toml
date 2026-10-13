@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cryptocore"
 version = "1.0.0"
-description = "CLI tool for AES-128 encryption and decryption in ECB, CBC, CFB, OFB and CTR modes."
+description = "CLI tool for AES-128 encryption (ECB, CBC, CFB, OFB, CTR) and SHA-256 / SHA3-256 file hashing."
 readme = "README.md"
 license = { text = "MIT" }
 
