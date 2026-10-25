@@ -1,11 +1,14 @@
-__pycache__/
-*.py[cod]
 .venv/
-venv/
-.env
-.pytest_cache/
-*.egg-info/
-dist/
-build/
 .idea/
-.vscode/
+.pytest_cache/
+__pycache__/
+*.egg-info/
+
+# артефакты ручных проверок
+*.bin
+*.enc
+*.dec
+decrypted.*
+nist_test_data.bin
+my_*.txt
+system_*.txt

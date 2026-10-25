@@ -1,36 +1,49 @@
+from __future__ import annotations
 import argparse
 import sys
-from pathlib import Path
 
+from .dgst_cli import run_dgst
+from .csprng import CSPRNGError, generate_key, generate_random_bytes
 from .file_io import read_binary_file, write_binary_file
 from .modes.ecb import decrypt_ecb, encrypt_ecb
+from .modes.cbc import decrypt_cbc, encrypt_cbc
+from .modes.cfb import decrypt_cfb, encrypt_cfb
+from .modes.ofb import decrypt_ofb, encrypt_ofb
+from .modes.ctr import decrypt_ctr, encrypt_ctr
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cryptocore",
-        description="AES-128 ECB encryption/decryption tool."
+        description="AES-128 encryption/decryption tool.",
+        epilog=(
+            "Вычисление хеша файла: cryptocore dgst --algorithm "
+            "{sha256,sha3-256} --input FILE (подробнее: cryptocore dgst --help)."
+        )
     )
 
     parser.add_argument(
         "--algorithm",
         required=True,
         choices=["aes"],
-        help="Алгоритм шифрования. Для Sprint 1: aes."
+        help="Алгоритм шифрования."
     )
+
     parser.add_argument(
         "--mode",
         required=True,
-        choices=["ecb"],
-        help="Режим работы. Для Sprint 1: ecb."
+        choices=["ecb", "cbc", "cfb", "ofb", "ctr"],
+        help="Режим работы AES."
     )
 
     operation = parser.add_mutually_exclusive_group(required=True)
+
     operation.add_argument(
         "--encrypt",
         action="store_true",
         help="Зашифровать входной файл."
     )
+
     operation.add_argument(
         "--decrypt",
         action="store_true",
@@ -39,15 +52,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--key",
-        required=True,
-        help="AES-128 ключ в HEX-формате, ровно 32 шестнадцатеричных символа."
+        help=(
+            "AES-128 ключ в HEX-формате, ровно 32 символа. "
+            "Обязателен при расшифровании. При шифровании, если не указан, "
+            "генерируется случайный ключ и выводится в stdout."
+        )
     )
+
+    parser.add_argument(
+        "--iv",
+        help="IV в HEX-формате. Используется при расшифровке."
+    )
+
     parser.add_argument(
         "--input",
         required=True,
         dest="input_file",
         help="Путь к входному файлу."
     )
+
     parser.add_argument(
         "--output",
         dest="output_file",
@@ -74,7 +97,42 @@ def parse_key(key_text: str) -> bytes:
     return key
 
 
-def get_output_path(input_path: str, decrypt: bool, output_path: str | None) -> str:
+def is_weak_key(key: bytes) -> bool:
+    if len(set(key)) == 1:
+        return True
+
+    ascending = all(
+        (key[i + 1] - key[i]) % 256 == 1 for i in range(len(key) - 1)
+    )
+    descending = all(
+        (key[i] - key[i + 1]) % 256 == 1 for i in range(len(key) - 1)
+    )
+
+    return ascending or descending
+
+
+def parse_iv(iv_text: str) -> bytes:
+    if len(iv_text) != 32:
+        raise ValueError(
+            "IV должен содержать ровно 32 шестнадцатеричных символа."
+        )
+
+    try:
+        iv = bytes.fromhex(iv_text)
+    except ValueError:
+        raise ValueError("IV должен быть указан в HEX-формате.")
+
+    if len(iv) != 16:
+        raise ValueError("IV должен иметь размер 16 байт.")
+
+    return iv
+
+
+def get_output_path(
+    input_path: str,
+    decrypt: bool,
+    output_path: str | None
+) -> str:
     if output_path:
         return output_path
 
@@ -84,30 +142,148 @@ def get_output_path(input_path: str, decrypt: bool, output_path: str | None) -> 
     return f"{input_path}.enc"
 
 
+def encrypt_data(
+    data: bytes,
+    key: bytes,
+    mode: str,
+    iv: bytes
+) -> bytes:
+
+    if mode == "cbc":
+        return encrypt_cbc(data, key, iv)
+
+    if mode == "cfb":
+        return encrypt_cfb(data, key, iv)
+
+    if mode == "ofb":
+        return encrypt_ofb(data, key, iv)
+
+    if mode == "ctr":
+        return encrypt_ctr(data, key, iv)
+
+    raise ValueError(f"Неизвестный режим: {mode}")
+
+
+def decrypt_data(
+    data: bytes,
+    key: bytes,
+    mode: str,
+    iv: bytes
+) -> bytes:
+
+    if mode == "cbc":
+        return decrypt_cbc(data, key, iv)
+
+    if mode == "cfb":
+        return decrypt_cfb(data, key, iv)
+
+    if mode == "ofb":
+        return decrypt_ofb(data, key, iv)
+
+    if mode == "ctr":
+        return decrypt_ctr(data, key, iv)
+
+    raise ValueError(f"Неизвестный режим: {mode}")
+
+
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "dgst":
+        return run_dgst(sys.argv[2:])
+
     parser = build_parser()
     args = parser.parse_args()
 
     try:
-        key = parse_key(args.key)
+        if args.key is None and args.decrypt:
+            raise ValueError(
+                "Для расшифрования параметр --key обязателен."
+            )
+
+        if args.encrypt and args.iv:
+            raise ValueError(
+                "--iv нельзя указывать при шифровании. "
+                "IV генерируется автоматически."
+            )
+
         input_data = read_binary_file(args.input_file)
+
         output_path = get_output_path(
             args.input_file,
             args.decrypt,
             args.output_file
         )
 
-        if args.encrypt:
-            result = encrypt_ecb(input_data, key)
+        if args.key is not None:
+            key = parse_key(args.key)
+
+            print(
+                "Предупреждение: передача ключа через командную строку "
+                "может быть небезопасной.",
+                file=sys.stderr
+            )
+
+            if is_weak_key(key):
+                print(
+                    "Предупреждение: указанный ключ выглядит слабым "
+                    "(одинаковые или последовательные байты). "
+                    "Используйте случайный ключ.",
+                    file=sys.stderr
+                )
         else:
-            result = decrypt_ecb(input_data, key)
+            key = generate_key()
+
+            print(f"[INFO] Generated random key: {key.hex()}", flush=True)
+
+        if args.mode == "ecb":
+            if args.encrypt:
+                result = encrypt_ecb(input_data, key)
+            else:
+                result = decrypt_ecb(input_data, key)
+
+            write_binary_file(output_path, result)
+
+            print(f"Готово: {output_path}")
+            return 0
+
+        if args.encrypt:
+            iv = generate_random_bytes(16)
+
+            encrypted_data = encrypt_data(
+                input_data,
+                key,
+                args.mode,
+                iv
+            )
+
+            result = iv + encrypted_data
+
+        else:
+            if args.iv:
+                iv = parse_iv(args.iv)
+                ciphertext = input_data
+            else:
+                if len(input_data) < 16:
+                    raise ValueError(
+                        "Входной файл должен содержать минимум 16 байт "
+                        "для хранения IV."
+                    )
+
+                iv = input_data[:16]
+                ciphertext = input_data[16:]
+
+            result = decrypt_data(
+                ciphertext,
+                key,
+                args.mode,
+                iv
+            )
 
         write_binary_file(output_path, result)
 
         print(f"Готово: {output_path}")
         return 0
 
-    except (ValueError, OSError) as error:
+    except (ValueError, OSError, CSPRNGError) as error:
         print(f"Ошибка: {error}", file=sys.stderr)
         return 1
 
