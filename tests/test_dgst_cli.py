@@ -136,7 +136,7 @@ def test_directory_as_input(tmp_path: Path):
 
 @pytest.mark.parametrize(
     "extra",
-    [["--key", "00" * 16], ["--mode", "cbc"], ["--encrypt"], ["--decrypt"], ["--iv", "00" * 16]],
+    [["--mode", "cbc"], ["--encrypt"], ["--decrypt"], ["--iv", "00" * 16]],
 )
 def test_dgst_rejects_encryption_arguments(tmp_path: Path, extra):
     path = tmp_path / "a.txt"

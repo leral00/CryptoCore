@@ -29,7 +29,6 @@ def test_known_answers(case):
 
 
 def test_empty_input():
-    """TEST-2."""
     assert SHA3_256().hexdigest() == (
         "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a"
     )
@@ -44,7 +43,6 @@ def test_round_constants_are_computed_correctly():
 
 
 def test_matches_hashlib_for_all_padding_boundaries():
-    """Длины вокруг границ rate = 136 байт (135/136/137, 271/272/273)."""
     for length in list(range(0, 300)) + [407, 408, 409]:
         data = os.urandom(length)
         assert SHA3_256(data).hexdigest() == hashlib.sha3_256(data).hexdigest(), length

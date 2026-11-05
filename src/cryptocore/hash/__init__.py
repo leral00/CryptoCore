@@ -20,7 +20,6 @@ def new_hasher(algorithm: str):
 
 
 def hash_stream(hasher, stream, chunk_size: int = CHUNK_SIZE) -> str:
-    """Хеширует бинарный поток порциями: память не зависит от размера данных."""
     while True:
         chunk = stream.read(chunk_size)
 

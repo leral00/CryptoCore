@@ -21,8 +21,6 @@ def test_pkcs7_invalid_padding():
 
 
 def test_aes_128_ecb_known_vector():
-    # 16 байт исходных данных; при реальной работе CryptoCore
-    # добавляет ещё один блок PKCS#7.
     plaintext = bytes.fromhex("00112233445566778899aabbccddeeff")
     expected_ciphertext = bytes.fromhex(
         "69c4e0d86a7b0430d8cdb78070b4c55a"

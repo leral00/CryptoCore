@@ -149,7 +149,6 @@ def test_decrypt_without_key_fails(tmp_path: Path):
 
 
 def test_provided_key_is_used_and_not_printed(tmp_path: Path):
-    """CLI-2: заданный ключ используется как раньше, [INFO] не выводится."""
     original = tmp_path / "plain.txt"
     original.write_bytes(b"data")
 

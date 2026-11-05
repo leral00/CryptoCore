@@ -9,11 +9,6 @@ class CSPRNGError(RuntimeError):
 
 
 def generate_random_bytes(num_bytes: int) -> bytes:
-    """Возвращает ``num_bytes`` криптографически стойких случайных байт.
-
-    :raises ValueError: если ``num_bytes`` не является положительным целым.
-    :raises CSPRNGError: если источник случайности ОС недоступен.
-    """
     if isinstance(num_bytes, bool) or not isinstance(num_bytes, int):
         raise ValueError("Количество байт должно быть целым числом.")
 

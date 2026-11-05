@@ -21,14 +21,12 @@ def test_rejects_invalid_size(bad):
 
 
 def test_key_uniqueness():
-    """TEST-2: 1000 ключей по 16 байт, дубликатов быть не должно."""
     num_keys = 1000
     keys = {generate_random_bytes(16).hex() for _ in range(num_keys)}
     assert len(keys) == num_keys
 
 
 def test_basic_distribution_hamming_weight():
-    """TEST-4: средняя доля единичных битов близка к 50%."""
     num_keys = 1000
     ones = sum(
         bin(int.from_bytes(generate_random_bytes(16), "big")).count("1")
@@ -39,7 +37,6 @@ def test_basic_distribution_hamming_weight():
 
 
 def test_os_failure_raises_clear_error(monkeypatch):
-    """RNG-6: сбой os.urandom -> понятное исключение."""
     def broken(_):
         raise OSError("device unavailable")
 
@@ -59,7 +56,6 @@ def test_short_read_is_detected(monkeypatch):
 
 
 def test_module_does_not_use_random_module():
-    """RNG-4: модуль random не импортируется."""
     tree = ast.parse(inspect.getsource(csprng))
     imported = set()
 
